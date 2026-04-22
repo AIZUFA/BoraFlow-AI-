@@ -1,7 +1,7 @@
 🦾 BoraFlow AI: High-Velocity Kinetic Signature Recognition
 BoraFlow AI is an end-to-end deep learning pipeline designed to recognize and classify complex human motion sequences in real-time. By leveraging a Stacked LSTM architecture and MediaPipe pose estimation, the system identifies intricate choreographies with high precision, specifically optimized for high-velocity transitions.
 
-<img width="1232" height="606" alt="image" src="https://github.com/user-attachments/assets/4446e029-92d5-4e94-bbbc-43479b4fd9f2" />
+<img width="970" height="535" alt="image" src="https://github.com/user-attachments/assets/b2f4d4ac-811a-4adf-a16f-b710da71a009" />
 
 🚀 Key Performance Metrics
 
