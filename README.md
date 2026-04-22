@@ -33,7 +33,7 @@ Phase 2 (Scaling): The dataset was expanded to 16 classes, adding high-velocity 
 
 Result: The increased spatial variety in the dataset allowed the model to better distinguish complex joint isolations, pushing the real-time confidence for the 'ON' class to 87.90%.
 
-<img width="767" height="147" alt="image" src="https://github.com/user-attachments/assets/5338179c-1556-4ea0-87aa-f7395a9512ef" />
+<img width="773" height="602" alt="image" src="https://github.com/user-attachments/assets/424dfe34-ce62-4307-bd0f-7a7e10bc3726" />
 
 🛠️ Tech Stack
 Language: Python
