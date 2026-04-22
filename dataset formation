@@ -1,0 +1,103 @@
+!pip install mediapipe==0.10.33
+# 1. Mount Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+# 3. The Extraction Logic
+import cv2
+import mediapipe as mp
+import pandas as pd
+import os
+import numpy as np # Often useful for image processing
+
+# --- Start of Mediapipe v0.10.33 updates ---
+
+# Download the Pose Landmarker model. This is a common practice in Colab.
+# We'll use a pre-trained model provided by MediaPipe.
+model_path = 'pose_landmarker_full.task'
+if not os.path.exists(model_path):
+    print(f"Downloading MediaPipe model: {model_path}")
+    os.system(f"wget -q -O {model_path} https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task")
+    print(f"Downloaded model to {model_path}")
+
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+# Configure PoseLandmarker options once, as they are constant for all videos
+base_options = python.BaseOptions(model_asset_path=model_path)
+options = vision.PoseLandmarkerOptions(
+    base_options=base_options,
+    output_segmentation_masks=False, # Set to True if segmentation masks are needed
+    running_mode=vision.RunningMode.VIDEO,
+    min_pose_detection_confidence=0.5, # Corrected argument name
+    min_tracking_confidence=0.5 # Add tracking confidence for video
+)
+
+# --- End of Mediapipe v00.10.33 updates ---
+
+
+# 4. Set your folder path (Make sure the name matches your Drive folder!)
+video_folder = '/content/drive/MyDrive/Boraflow'
+output_data = []
+
+# Loop through the videos
+for filename in os.listdir(video_folder):
+    if filename.endswith(".mp4"):
+        print(f"Analyzing {filename}...")
+        video_path = os.path.join(video_folder, filename)
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            print(f"Error: Could not open video {filename}. Skipping.")
+            continue
+
+        # Create a new PoseLandmarker object for each video
+        landmarker = vision.PoseLandmarker.create_from_options(options)
+
+        frame_count = 0
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: break
+
+            # Get timestamp in milliseconds for detect_for_video
+            timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+
+            # Convert the frame to MediaPipe's Image format (RGB)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Corrected: Use mp.Image constructor directly
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+
+            # Perform pose detection
+            # The detect_for_video method now requires a MediaPipe Image and a timestamp.
+            results = landmarker.detect_for_video(mp_image, timestamp_ms)
+
+            # Check if pose landmarks were detected
+            if results.pose_landmarks:
+                # results.pose_landmarks is a list of lists of landmarks
+                # For video, typically we care about the first detected person.
+                # If multiple people are expected, this logic needs adjustment.
+                # Here, we assume one person, taking the first list of landmarks.
+                for person_landmarks in results.pose_landmarks:
+                    # Collect X and Y coordinates from each landmark in the person's pose
+                    # Each landmark has x, y, z, and visibility attributes.
+                    row = [filename]
+                    for lm in person_landmarks:
+                        row.append(lm.x)
+                    for lm in person_landmarks:
+                        row.append(lm.y)
+                    output_data.append(row)
+            frame_count += 1
+        cap.release()
+        # Close the landmarker after processing each video
+        landmarker.close()
+        print(f"Finished analyzing {filename}. Processed {frame_count} frames.")
+
+# 5. Save and Download your Dataset
+# Ensure column names are correct.
+# MediaPipe's Pose Landmarker has 33 landmarks.
+# So, we'll have 33 x_coords + 33 y_coords + 1 filename column.
+num_landmarks = 33 # Standard for MediaPipe Pose
+column_names = ['filename'] + [f'x_{i}' for i in range(num_landmarks)] + [f'y_{i}' for i in range(num_landmarks)]
+
+df = pd.DataFrame(output_data, columns=column_names)
+df.to_csv('Boraflow_Dataset.csv', index=False)
+print("Dataset created! Check the 'Files' tab on the left to download it.")
