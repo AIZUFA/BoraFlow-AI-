@@ -1,0 +1,374 @@
+import os
+
+# Define the folder path
+video_folder = '/content/drive/MyDrive/Boraflow/'
+
+# Check if the folder exists
+if os.path.exists(video_folder):
+    print(f"Contents of {video_folder}:")
+    for item in os.listdir(video_folder):
+        print(item)
+else:
+    print(f"Error: Folder '{video_folder}' not found. Please ensure it exists in your Google Drive.")
+# Install Ultralytics
+!pip install ultralytics opencv-python-headless
+import cv2
+import numpy as np
+from google.colab.patches import cv2_imshow
+from ultralytics import YOLO
+from google.colab import drive
+import os
+
+drive.mount('/content/drive')
+
+# 2. Load YOLOv8 Pose Model
+# You can choose different sizes, e.g., 'yolov8s-pose.pt' for 'small' or 'yolov8l-pose.pt' for 'large'
+model = YOLO('yolov8n-pose.pt') # 'n' for nano, a fast and lightweight model
+
+# Custom styling for visualization (matching the 'Bora Purple' theme)
+custom_kpt_color = (128, 0, 128) # Purple (BGR)
+custom_line_color = (255, 255, 255) # White (BGR)
+
+# COCO 17 keypoints (standard order for YOLOv8-pose)
+# Nose, Left Eye, Right Eye, Left Ear, Right Ear,
+# Left Shoulder, Right Shoulder, Left Elbow, Right Elbow, Left Wrist, Right Wrist,
+# Left Hip, Right Hip, Left Knee, Right Knee, Left Ankle, Right Ankle
+
+# Define skeleton connections for COCO 17 keypoints (tuples of keypoint indices)
+POSE_PAIRS = [
+    (0, 1), (0, 2), (1, 3), (2, 4), # Head/Face
+    (5, 6), (5, 7), (6, 8), (7, 9), (8, 10), # Arms
+    (11, 12), (5, 11), (6, 12), # Torso
+    (11, 13), (12, 14), (13, 15), (14, 16) # Legs
+]
+
+# 3. Path Setup (Ensure these match your Drive exactly)
+input_path = '/content/drive/MyDrive/Boraflow/BTS  FIRE  mirrored Dance Practice_1080p.mp4'
+output_folder = '/content/drive/MyDrive/BoraFlow_YOLO_Skeletons/' # Changed output folder to Google Drive
+
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
+
+# This will be the temporary video file without audio
+temp_output_filename = os.path.join(output_folder, 'temp_skele_YOLO_BTS_FIRE_mirrored_Dance_Practice_1080p.mp4')
+
+cap = cv2.VideoCapture(input_path)
+width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fps    = cap.get(cv2.CAP_PROP_FPS)
+
+# Setup the output video file (without audio initially)
+fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Codec for .mp4 output
+out = cv2.VideoWriter(temp_output_filename, fourcc, fps, (width, height))
+
+print(f"Processing video: {input_path}")
+
+frame_count = 0
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret: # Process entire video, no frame limit
+        break
+
+    # Perform inference with YOLOv8-pose
+    results = model(frame, verbose=False) # verbose=False to suppress extensive logging per frame
+
+    # Process results and draw skeletons
+    for r in results:
+        if r.keypoints.data.shape[0] > 0: # Check if any keypoints are detected
+            # Keypoints are typically in (num_people, num_keypoints, 3) format (x, y, confidence)
+            for person_keypoints in r.keypoints.data:
+                # Draw keypoints
+                for kpt in person_keypoints:
+                    x, y, conf = int(kpt[0]), int(kpt[1]), kpt[2]
+                    if conf > 0.5: # Only draw keypoints with confidence > 0.5
+                        cv2.circle(frame, (x, y), 5, custom_kpt_color, -1)
+
+                # Draw connections (skeleton)
+                for pair in POSE_PAIRS:
+                    kpt1_idx, kpt2_idx = pair
+                    kpt1 = person_keypoints[kpt1_idx]
+                    kpt2 = person_keypoints[kpt2_idx]
+
+                    x1, y1, conf1 = int(kpt1[0]), int(kpt1[1]), kpt1[2]
+                    x2, y2, conf2 = int(kpt2[0]), int(kpt2[1]), kpt2[2]
+
+                    if conf1 > 0.5 and conf2 > 0.5: # Only draw lines if both keypoints are confident
+                        cv2.line(frame, (x1, y1), (x2, y2), custom_line_color, 2)
+
+    out.write(frame)
+
+    if frame_count % (int(fps) * 10) == 0: # Print progress every 10 seconds of video
+        print(f"Processing Frame {frame_count}...")
+        # cv2_imshow(cv2.resize(frame, (480, 270))) # Disabled for full video processing to save time
+
+    frame_count += 1
+
+cap.release()
+out.release()
+print(f"\nTemporary video (without audio) saved as {temp_output_filename}")
+print("Next, we will add the audio and create the final video.")
+# Install moviepy
+!pip install moviepy
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+import os
+
+# Ensure output_folder is accessible
+output_folder = '/content/drive/MyDrive/BoraFlow_YOLO_Skeletons/'
+input_path = '/content/drive/MyDrive/Boraflow/BTS  FIRE  mirrored Dance Practice_1080p.mp4'
+temp_output_filename = os.path.join(output_folder, 'temp_skele_YOLO_BTS_FIRE_mirrored_Dance_Practice_1080p.mp4')
+
+# Define the final output filename with audio
+output_filename_with_audio = os.path.join(output_folder, 'skele_YOLO_BTS_FIRE_mirrored_Dance_Practice_1080p.mp4')
+
+print(f"Original video: {input_path}")
+print(f"Processed video (no audio): {temp_output_filename}")
+
+# Load the processed video (without audio)
+video_clip = VideoFileClip(temp_output_filename)
+
+# Load the audio from the original video
+original_audio = AudioFileClip(input_path)
+
+# Set the audio of the processed video to the original audio
+final_clip = video_clip.set_audio(original_audio)
+
+# Write the final video to a new file
+final_clip.write_videofile(output_filename_with_audio, codec='libx264', audio_codec='aac', verbose=False)
+
+print(f"\nFinal video with audio saved as: {output_filename_with_audio}")
+from IPython.display import HTML
+from base64 import b64encode
+
+# Get the path to the generated video from the previous execution
+# Ensure output_filename is correctly set in the previous cell
+
+def play_video(filename):
+    # Read the video file in binary mode
+    video_file = open(filename, 'rb').read()
+    # Encode the video to base64 for embedding in HTML
+    video_url = f"data:video/mp4;base64,{b64encode(video_file).decode()}"
+    # Create an HTML video player
+    return HTML(f"""
+    <video width=600 controls>
+        <source src="{video_url}" type="video/mp4">
+    </video>""")
+
+# Display the video
+# Make sure the output_filename variable is still accessible from the previous cell
+if 'output_filename' in locals():
+    print(f"Displaying video: {output_filename}")
+    display(play_video(output_filename))
+else:
+    print("Error: output_filename variable not found. Please ensure the previous cell ran successfully.")import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+
+# 1. Load your massive dataset
+df = pd.read_csv('Boraflow_Dataset.csv')
+
+# 2. Convert filenames to numeric labels (e.g., Fire -> 1)
+encoder = LabelEncoder()
+df['label'] = encoder.fit_transform(df['filename'])
+num_classes = len(encoder.classes_)
+
+# 3. Create "Windows" of 30 frames
+# This turns the flat table into 3D data: (Samples, Time-Steps, Features)
+def create_sequences(data, seq_length=30):
+    sequences = []
+    labels = []
+    for song_label in data['label'].unique():
+        song_data = data[data['label'] == song_label].iloc[:, 1:-1].values # Get x/y columns
+        for i in range(0, len(song_data) - seq_length, 15): # Overlap windows by 15 frames
+            sequences.append(song_data[i : i + seq_length])
+            labels.append(song_label)
+    return np.array(sequences), np.array(labels)
+
+X, y = create_sequences(df)
+
+# 4. Split into Training and Testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+print(f"Data Prepared!")
+print(f"Total Sequences: {len(X)}")
+print(f"Shape for AI: {X_train.shape} (Sequences, Frames, Coordinates)")   
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+
+# 1. Define the Architecture
+model = Sequential([
+    # First LSTM layer: units=64, input is 30 frames by 66 coordinates
+    LSTM(64, input_shape=(X_train.shape[1], X_train.shape[2]), return_sequences=True),
+    Dropout(0.2), # Prevents overfitting (making the AI too rigid)
+
+    # Second LSTM layer
+    LSTM(32),
+    Dropout(0.2),
+
+    # Fully connected layers
+    Dense(16, activation='relu'),
+    # Output layer: one neuron for each of your 11 songs
+    Dense(num_classes, activation='softmax')
+])
+
+# 2. Compile the model
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+
+model.summary()
+
+# 3. Start Training!
+print("\n🔥 Training the BoraFlow Brain...")
+history = model.fit(X_train, y_train,
+                    epochs=50,
+                    batch_size=32,
+                    validation_data=(X_test, y_test))
+import matplotlib.pyplot as plt
+
+# Plot training & validation accuracy values
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('Model Accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Validation'], loc='upper left')
+
+# Plot training & validation loss values
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model Loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Validation'], loc='upper left')
+
+plt.tight_layout()
+plt.show()
+
+# Also print the final accuracy values for clarity
+final_train_accuracy = history.history['accuracy'][-1]
+final_val_accuracy = history.history['val_accuracy'][-1]
+print(f"\nFinal Training Accuracy: {final_train_accuracy:.4f}")
+print(f"Final Validation Accuracy: {final_val_accuracy:.4f}")
+import numpy as np
+
+# Pick a random sequence from your test set
+random_index = np.random.randint(0, len(X_test))
+sample_sequence = X_test[random_index].reshape(1, 30, 66)
+
+# Make a prediction
+prediction = model.predict(sample_sequence)
+predicted_label = np.argmax(prediction)
+actual_label = y_test[random_index]
+
+# Decode the name
+predicted_song = encoder.inverse_transform([predicted_label])[0]
+actual_song = encoder.inverse_transform([actual_label])[0]
+
+print(f"\n--- BoraFlow AI Analysis ---")
+print(f"AI Prediction: {predicted_song}")
+print(f"Actual Song:   {actual_song}")
+print(f"Confidence:    {np.max(prediction)*100:.2f}%")
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
+# 1. Get predictions for the entire test set
+y_pred = model.predict(X_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+
+# 2. Generate the matrix
+cm = confusion_matrix(y_test, y_pred_classes)
+
+# 3. Plotting
+plt.figure(figsize=(12, 10))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Purples',
+            xticklabels=encoder.classes_,
+            yticklabels=encoder.classes_)
+
+plt.title('BoraFlow AI: Choreography Confusion Matrix', fontsize=16)
+plt.xlabel('Predicted Song', fontsize=12)
+plt.ylabel('Actual Song', fontsize=12)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig('boraflow_confusion_matrix.png')
+plt.show()
+from collections import defaultdict
+
+# Initialize a dictionary to store confidence scores for each class
+class_confidences = defaultdict(list)
+
+# Iterate through each prediction
+for i in range(len(y_pred)):
+    predicted_class_index = y_pred_classes[i]
+    # Get the confidence for the predicted class
+    confidence = y_pred[i][predicted_class_index]
+    class_confidences[predicted_class_index].append(confidence)
+
+# Calculate the average confidence for each class
+average_confidences = {}
+for class_index, conf_list in class_confidences.items():
+    average_confidences[class_index] = np.mean(conf_list)
+
+# Map class indices back to song names and print results
+print("\nAverage Confidence Scores Per Class:")
+sorted_class_indices = sorted(average_confidences.keys())
+for class_index in sorted_class_indices:
+    song_name = encoder.inverse_transform([class_index])[0]
+    avg_conf = average_confidences[class_index]
+    print(f"- {song_name}: {avg_conf:.4f}")
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Get the maximum confidence for each prediction in the test set
+max_confidences = np.max(y_pred, axis=1)
+
+plt.figure(figsize=(10, 6))
+sns.histplot(max_confidences, bins=20, kde=True, color='purple')
+plt.title('Distribution of Max Confidence Scores for Test Set Predictions')
+plt.xlabel('Max Confidence Score')
+plt.ylabel('Number of Sequences')
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+# Prepare data for the bar chart from the average_confidences dictionary
+# Map class indices back to song names
+conf_df = pd.DataFrame({
+    'Song': [encoder.inverse_transform([idx])[0] for idx in average_confidences.keys()],
+    'Average Confidence': [avg_conf for avg_conf in average_confidences.values()]
+})
+
+# Sort by average confidence for better readability
+conf_df = conf_df.sort_values(by='Average Confidence', ascending=False)
+
+plt.figure(figsize=(12, 7))
+sns.barplot(x='Average Confidence', y='Song', data=conf_df, palette='Purples_r')
+plt.title('Average Confidence Score per Predicted Song Class')
+plt.xlabel('Average Confidence')
+plt.ylabel('Song Name')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Get the value counts of each filename (dance routine)
+class_counts = df_raw['filename'].value_counts()
+
+plt.figure(figsize=(12, 6))
+sns.barplot(x=class_counts.index, y=class_counts.values, palette='Purples_r')
+plt.title('Distribution of Frames per Dance Routine')
+plt.xlabel('Dance Routine')
+plt.ylabel('Number of Frames')
+plt.xticks(rotation=90)
+plt.tight_layout()
+plt.show()
